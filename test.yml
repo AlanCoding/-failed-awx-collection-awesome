@@ -1,0 +1,22 @@
+- hosts: all
+  gather_facts: false
+  connection: local
+  vars:
+    tower_password: password
+    collection_id: awx.awx
+  collections:
+    # - chrismeyersfsu.tower_modules
+    - "{{ collection_id }}"
+  tasks:
+    - name: run tower_organization module
+      tower_organization:
+        name: alan_org
+        state: present
+        tower_host: http://localhost:8013
+        tower_username: admin
+        tower_password: "{{ tower_password }}"
+        validate_certs: false
+      register: module_result
+
+    - name: show result of the tower_organization task
+      debug: var=module_result

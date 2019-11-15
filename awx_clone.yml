@@ -1,0 +1,66 @@
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    collection_package: awx_awesome
+    collection_namespace: alancoding
+    collection_version: 0.0.1
+    awx_repo: https://github.com/ansible/awx.git
+    awx_branch: devel
+    clone_path: awx
+
+  tasks:
+  - name: Check out AWX
+    git:
+      repo: "{{ awx_repo }}"
+      dest: "{{ clone_path }}"
+      version: "{{ awx_branch }}"
+      force: yes
+      depth: 1
+
+  - name: Do file content replacements for non-default namespace or package name
+    block:
+    - name: Find all module files
+      find:
+        paths: "{{ clone_path }}/awx_collection/plugins/modules"
+        patterns: "*.py"
+      register: module_files
+
+    - name: Change files to support desired namespace and package names
+      replace:
+        path: "{{ item.path }}"
+        regexp: '^extends_documentation_fragment: awx.awx.auth$'
+        replace: 'extends_documentation_fragment: {{ collection_namespace }}.{{ collection_package }}.auth'
+      with_items: "{{ module_files.files }}"
+
+    - name: Change files to support desired namespace and package names
+      replace:
+        path: "{{ clone_path }}/awx_collection/plugins/inventory/tower.py"
+        regexp: "^    NAME = 'awx.awx.tower'  # REPLACE$"
+        replace: "    NAME = '{{ collection_namespace }}.{{ collection_package }}.tower'  # REPLACE"
+    when:
+      - (collection_package != 'awx') or (collection_namespace != 'awx')
+
+  - name: Change imports to use tower-cli from the module_utils (this is a great idea)
+    replace:
+      path: "{{ item }}"
+      regexp: 'import tower_cli$'
+      replace: 'import ansible_collections.{{ collection_namespace }}.{{ collection_package }}.plugins.module_utils.tower_cli as tower_cli'
+    with_items: "{{ module_files.files | map(attribute='path') | list }} + ['awx/awx_collection/plugins/module_utils/ansible_tower.py']"
+
+  - name: Change imports number 2
+    replace:
+      path: "{{ item }}"
+      regexp: 'from tower_cli.'
+      replace: 'from ansible_collections.{{ collection_namespace }}.{{ collection_package }}.plugins.module_utils.tower_cli.'
+    with_items: "{{ module_files.files | map(attribute='path') | list }} + ['awx/awx_collection/plugins/module_utils/ansible_tower.py']"
+
+  - name: Change imports number threeeee
+    replace:
+      path: "{{ item }}"
+      regexp: 'import tower_cli.'
+      replace: 'import ansible_collections.{{ collection_namespace }}.{{ collection_package }}.plugins.module_utils.tower_cli.'
+    with_items: "{{ module_files.files | map(attribute='path') | list }} + ['awx/awx_collection/plugins/module_utils/ansible_tower.py']"
+
+  - name: Template the galaxy.yml file
+    template: src={{ clone_path }}/awx_collection/galaxy.yml.j2 dest={{ clone_path }}/awx_collection/galaxy.yml
